@@ -1,10 +1,17 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking, Dimensions } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Linking,
+  Animated,
+  Easing,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons, FontAwesome5} from "@expo/vector-icons";
+import { Ionicons, FontAwesome5, MaterialIcons } from "@expo/vector-icons";
 import style from "../../../assets/style";
-
-const { width, height } = Dimensions.get("window");
 
 interface TeamMember {
   id: string;
@@ -14,12 +21,9 @@ interface TeamMember {
   iconColor?: string;
   phone: string;
   instagram: string;
-  description: string;
 }
 
 export default function ContactScreen() {
-  
-
   const teamMembers: TeamMember[] = [
     {
       id: "1",
@@ -29,7 +33,6 @@ export default function ContactScreen() {
       iconColor: style.color.mainColor1,
       phone: "0820855888",
       instagram: "_poo.nn",
-      description: "6610742477"
     },
     {
       id: "2",
@@ -38,28 +41,17 @@ export default function ContactScreen() {
       iconName: "headset",
       iconColor: style.color.mainColor1,
       phone: "0820560989",
-      instagram: "kunanon_bm",
-      description: "6610742386"
+      instagram: "beam.knn",
     },
     {
       id: "3",
       name: "สิทธิชัย เกษแก้ว",
       position: "Developer",
-      iconName: "people", 
+      iconName: "people",
       iconColor: style.color.mainColor1,
       phone: "0963602324",
       instagram: "nhom_jc",
-      description: "6610742568"
     },
-    // {
-    //   id: "4",
-    //   name: "พัชราภรณ์ สวยงาม",
-    //   position: "ผู้ช่วยทีม",
-    //   image: "",
-    //   phone: "0845678901",
-    //   instagram: "patchraporn_beauty",
-    //   description: "พร้อมให้บริการและช่วยเหลือประชาชนด้วยความเต็มใจและรอยยิ้ม"
-    // }
   ];
 
   const callNumber = (phoneNumber: string) => {
@@ -69,47 +61,66 @@ export default function ContactScreen() {
   const openInstagram = (username: string) => {
     Linking.openURL(`https://www.instagram.com/${username}`);
   };
+  const openFacebook = () => { Linking.openURL('https://www.facebook.com/'); }; 
+  const openLine = () => { Linking.openURL('https://line.me/R/ti/p/@lineofficial'); };
 
-  const openFacebook = () => {
-    Linking.openURL('https://www.facebook.com/');
-  };
+  /** ─────────────────────────────────────────
+   *  Animated Icon Bounce
+   ───────────────────────────────────────── */
+  const renderIcon = (iconName: any) => {
+    const bounceAnim = React.useRef(new Animated.Value(0)).current;
 
-  const openLine = () => {
-    Linking.openURL('https://line.me/R/ti/p/@lineofficial');
-  };
+    React.useEffect(() => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(bounceAnim, {
+            toValue: -6,
+            duration: 800,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(bounceAnim, {
+            toValue: 0,
+            duration: 800,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    }, []);
 
-  const renderIcon = (iconName: any, color: string = "#4CAF50") => {
     return (
-      <View style={[styles.iconContainer, { backgroundColor: color + '20' }]}>
-        <Ionicons name={iconName} size={40} color={color} />
-      </View>
+      <Animated.View
+        style={[styles.iconContainer, { transform: [{ translateY: bounceAnim }] }]}
+      >
+        <Ionicons name={iconName} size={34} color="#fff" />
+      </Animated.View>
     );
   };
 
   const renderTeamMember = (member: TeamMember) => (
     <View key={member.id} style={styles.memberCard}>
-      {renderIcon(member.iconName, member.iconColor)}
+      {renderIcon(member.iconName)}
 
       <View style={styles.memberInfo}>
         <Text style={styles.memberName}>{member.name}</Text>
         <Text style={styles.memberPosition}>{member.position}</Text>
-        <Text style={styles.memberDescription}>{member.description}</Text>
-        
+
         <View style={styles.contactButtons}>
-          <TouchableOpacity 
-            style={styles.phoneButton} 
+          <TouchableOpacity
+            style={styles.phoneButton}
             onPress={() => callNumber(member.phone)}
           >
-            <Ionicons name="call" size={20} color="#fff" />
-            <Text style={styles.buttonText}>โทร</Text>
+            <Ionicons name="call" size={18} color={style.color.mainColor1} />
+            <Text style={styles.buttonText}>Call</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.igButton} 
+
+          <TouchableOpacity
+            style={styles.igButton}
             onPress={() => openInstagram(member.instagram)}
           >
-            <Ionicons name="logo-instagram" size={20} color="#fff" />
-            <Text style={styles.buttonText}>IG</Text>
+            <FontAwesome5 name="instagram" size={16} color="#E1306C" />
+            <Text style={styles.buttonTextIG}>Instagram</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -117,46 +128,37 @@ export default function ContactScreen() {
   );
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+    <SafeAreaView edges={["top"]} style={{ flex: 1 }}>
       <View style={styles.container}>
-        {/* ส่วนหัว */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>ติดต่อทีมงาน</Text>
-          {/* <Text style={styles.headerSubtitle}>เราพร้อมช่วยเหลือคุณตลอด 24 ชั่วโมง</Text> */}
+          <Text style={styles.headerTitle}>Contact The Team</Text>
         </View>
-        
+
         <ScrollView style={styles.content}>
+          {/* <TouchableOpacity
+            style={styles.emergencyButton}
+            onPress={() => callNumber("191")}
+          >
+            <MaterialIcons name="emergency" size={24} color="#fff" />
+            <Text style={styles.emergencyButtonText}>Emergency Call 191</Text>
+          </TouchableOpacity> */}
+
           {teamMembers.map(renderTeamMember)}
 
           <View style={styles.contactSection}>
-            <Text style={styles.sectionTitle}>ช่องทางการติดต่ออื่นๆ</Text>
-            
-            <TouchableOpacity 
-              style={[styles.socialButton, styles.fbButton]}
-              onPress={openFacebook}
-            >
+            <Text style={styles.sectionTitle}>Other Contact Channels</Text>
+
+            <TouchableOpacity style={[styles.socialButton, styles.fbButton]}
+            onPress={openFacebook}>
               <FontAwesome5 name="facebook" size={20} color="#fff" />
               <Text style={styles.socialButtonText}>Facebook</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.socialButton, styles.lineButton]}
-              onPress={openLine}
-            >
+
+            <TouchableOpacity style={[styles.socialButton, styles.lineButton]}
+            onPress={openLine}>
               <FontAwesome5 name="line" size={20} color="#fff" />
               <Text style={styles.socialButtonText}>Line Official</Text>
             </TouchableOpacity>
-            
-            <View style={styles.emergencyContact}>
-              <Text style={styles.emergencyTitle}>ติดต่อฉุกเฉิน</Text>
-              <TouchableOpacity 
-                style={styles.emergencyButton}
-                onPress={() => callNumber('191')}
-              >
-                <Ionicons name="alert-circle" size={24} color="#fff" />
-                <Text style={styles.emergencyButtonText}>โทร 191</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </ScrollView>
       </View>
@@ -164,166 +166,157 @@ export default function ContactScreen() {
   );
 }
 
+/* ─────────────────────────────────────────
+ *                Styles
+ * ───────────────────────────────────────── */
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#f8f9fa", 
+  container: {
+    flex: 1,
+    backgroundColor: "#F5F8FF",
   },
+
   header: {
-    padding: 16,
+    padding: 20,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    borderBottomColor: "#E4E6EB",
     alignItems: "center",
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 4,
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#3A3A3A",
   },
-  headerSubtitle: {
-    fontSize: 14,
-    color: "#666",
+
+  content: { padding: 16 },
+
+  /* Animated Icon Container */
+  iconContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 40,
+    marginRight: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: style.color.mainColor1,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
   },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
+
+  /* Member Card */
   memberCard: {
     flexDirection: "row",
     backgroundColor: "#fff",
-    borderRadius: 12,
-    marginBottom: 16,
+    borderRadius: 16,
     padding: 16,
+    marginBottom: 16,
     shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  // memberImage: {
-  //   width: 80,
-  //   height: 80,
-  //   borderRadius: 40,
-  //   marginRight: 16,
-  // },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginRight: 25,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  memberInfo: {
-    flex: 1,
-  },
+
+  memberInfo: { flex: 1 },
   memberName: {
     fontSize: 18,
-    fontWeight: "bold",
+    fontWeight: "700",
     color: "#333",
-    marginBottom: 4,
   },
   memberPosition: {
     fontSize: 14,
     color: style.color.subColor1,
-    marginBottom: 8,
+    marginVertical: 4,
     fontWeight: "500",
   },
-  memberDescription: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 12,
-    lineHeight: 20,
-  },
+
+  /* Buttons */
   contactButtons: {
     flexDirection: "row",
+    marginTop: 10,
   },
   phoneButton: {
     flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: style.color.mainColor1,
+    backgroundColor: style.color.mainColor1 + "15",
     paddingVertical: 8,
     paddingHorizontal: 16,
-    borderRadius: 20,
-    marginRight: 12,
+    borderRadius: 12,
+    marginRight: 10,
+    alignItems: "center",
   },
   igButton: {
     flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#E1306C",
+    backgroundColor: "#FCE4EC",
     paddingVertical: 8,
     paddingHorizontal: 16,
-    borderRadius: 20,
+    borderRadius: 12,
+    alignItems: "center",
   },
+
   buttonText: {
-    color: "#fff",
+    color: style.color.mainColor1,
     marginLeft: 6,
-    fontWeight: "500",
+    fontWeight: "600",
   },
+  buttonTextIG: {
+    color: "#E1306C",
+    marginLeft: 6,
+    fontWeight: "600",
+  },
+
+  /* Emergency */
+  emergencyButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#D7263D",
+    paddingVertical: 20,
+    borderRadius: 12,
+    justifyContent: "center",
+    marginBottom: 22,
+    shadowColor: "#D7263D",
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+  },
+  emergencyButtonText: {
+    color: "#fff",
+    marginLeft: 10,
+    fontSize: 17,
+    fontWeight: "bold",
+  },
+
+  /* Other Contact Section */
   contactSection: {
     backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
+    padding: 18,
+    borderRadius: 16,
     marginBottom: 20,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
+    fontWeight: "700",
     marginBottom: 16,
+    color: "#333",
   },
+
   socialButton: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
     marginBottom: 12,
   },
-  fbButton: {
-    backgroundColor: style.color.mainColor1,
-  },
-  lineButton: {
-    backgroundColor: style.color.mainColor2,
-  },
+  fbButton: { backgroundColor: "#0A64A4" },
+  lineButton: { backgroundColor: "#00C300" },
+
   socialButtonText: {
     color: "#fff",
     marginLeft: 12,
     fontSize: 16,
-    fontWeight: "500",
-  },
-  emergencyContact: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#eee",
-    alignItems: "center",
-  },
-  emergencyTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 12,
-  },
-  emergencyButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: style.color.buttonColor,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-  },
-  emergencyButtonText: {
-    color: "#fff",
-    marginLeft: 8,
-    fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "600",
   },
 });

@@ -1,25 +1,43 @@
-import React, { useState } from "react";
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
+import React, { useState, useRef } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
   TextInput,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons, MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { RootStackParamList } from "../../navigations/navigator";
 import Header from "../../../assets/constants/header";
 import style from "../../../assets/style";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { auth } from "../../config/firebase";
+import { apiFetch } from "../../utils/apiClient";
 
 type RegisterVolunteerScreenProp = NativeStackNavigationProp<
   RootStackParamList,
   "RegisterVolunteer"
 >;
+
+type RegisterResponse = {
+  user: {
+    name?: string;
+    surname?: string;
+    email: string;
+    tel?: string;
+    type: string;
+    points?: number;
+    id?: string;
+  };
+};
 
 export default function RegisterVolunteer() {
   const [name, setName] = useState("");
@@ -29,214 +47,275 @@ export default function RegisterVolunteer() {
   const [tel, setTel] = useState("");
   const [loading, setLoading] = useState(false);
   const navigation = useNavigation<RegisterVolunteerScreenProp>();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const contentRef = useRef<View>(null);
+  const nameContainerRef = useRef<View>(null);
+  const surnameContainerRef = useRef<View>(null);
+  const emailContainerRef = useRef<View>(null);
+  const telContainerRef = useRef<View>(null);
+  const passwordContainerRef = useRef<View>(null);
+
+  const handleInputFocus = (containerRef: React.RefObject<View | null>) => {
+    setTimeout(() => {
+      if (containerRef.current && contentRef.current && scrollViewRef.current) {
+        containerRef.current.measureLayout(
+          contentRef.current,
+          (x, y, width, height) => {
+            const scrollOffset = y - 150;
+            scrollViewRef.current?.scrollTo({
+              y: Math.max(0, scrollOffset),
+              animated: true,
+            });
+          },
+          () => {
+            // Fallback: scroll down a bit
+            scrollViewRef.current?.scrollTo({
+              y: 150,
+              animated: true,
+            });
+          }
+        );
+      }
+    }, 100);
+  };
 
   const handleRegister = async () => {
-    // Validation
     if (!name.trim() || !surname.trim() || !email.trim() || !password.trim() || !tel.trim()) {
-      Alert.alert("แจ้งเตือน", "กรุณากรอกข้อมูลให้ครบถ้วน");
+      Alert.alert("Alert", "Please fill in all fields");
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert("แจ้งเตือน", "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร");
+      Alert.alert("Alert", "Password must be at least 6 characters");
       return;
     }
 
     if (!email.includes("@")) {
-      Alert.alert("แจ้งเตือน", "กรุณากรอกอีเมลให้ถูกต้อง");
+      Alert.alert("Alert", "Please enter a valid email address");
       return;
     }
 
     setLoading(true);
 
     try {
-      // ตรวจสอบว่ามี email นี้อยู่แล้วหรือยัง
-      const registeredUsers = await AsyncStorage.getItem('registeredUsers');
-      const users = registeredUsers ? JSON.parse(registeredUsers) : [];
-      
-      const existingUser = users.find((u: any) => 
-        u.email === email.trim().toLowerCase()
+      const normalizedEmail = email.trim().toLowerCase();
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        normalizedEmail,
+        password
       );
 
-      if (existingUser) {
-        Alert.alert("แจ้งเตือน", "อีเมลนี้ถูกใช้งานแล้ว");
-        setLoading(false);
-        return;
-      }
+      const firebaseUser = userCredential.user;
 
-      // เก็บข้อมูล user ใหม่ (mock registration - ใน production จะใช้ Firebase Auth)
-      const newUser = {
-        id: Date.now().toString(),
-        email: email.trim().toLowerCase(),
-        password: password, // ใน production จะไม่เก็บ password แบบนี้
-        name: name.trim(),
-        surname: surname.trim(),
-        tel: tel.trim(),
-        type: 'volunteer',
-        points: 0,
-        createdAt: new Date().toISOString(),
-      };
+      await updateProfile(firebaseUser, {
+        displayName: `${name.trim()} ${surname.trim()}`.trim(),
+      });
 
-      users.push(newUser);
-      await AsyncStorage.setItem('registeredUsers', JSON.stringify(users));
+      const data = await apiFetch<RegisterResponse>("/auth/register", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "volunteer",
+          name: name.trim(),
+          surname: surname.trim(),
+          tel: tel.trim(),
+        }),
+      });
 
-      // TODO: Implement Firebase Auth registration
-      // 1. Create user with Firebase Auth
-      // 2. Call backend API to register user profile
-      
+      await AsyncStorage.setItem("currentUser", JSON.stringify(data.user));
+
       Alert.alert(
-        "สำเร็จ",
-        "สมัครสมาชิกเรียบร้อยแล้ว",
+        "Success",
+        "Registration completed successfully",
         [
           {
-            text: "ตกลง",
-            onPress: () => navigation.navigate("LoginVolunteer" as never)
-          }
+            text: "OK",
+            onPress: () => navigation.navigate("LoginVolunteer" as never),
+          },
         ]
       );
     } catch (error: any) {
-      Alert.alert("เกิดข้อผิดพลาด", error.message || "ไม่สามารถสมัครสมาชิกได้");
+      if (error.code === "auth/email-already-in-use") {
+        Alert.alert("Alert", "This email is already in use");
+      } else {
+        Alert.alert("Error", error.message || "Unable to register");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Header title="สมัครสมาชิก" />
-      
-      <TouchableOpacity 
-        style={styles.backButton} 
-        onPress={() => navigation.goBack()}
-      >
-        <MaterialCommunityIcons name="arrow-left" size={28} color="#000" />
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+    >
+      <Header title="Register" />
+      <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("Login" as never)}>
+        <MaterialIcons name="arrow-back-ios" size={24} color="#000" />
         <Text style={styles.backText}>Back</Text>
       </TouchableOpacity>
 
-      <View style={styles.content}>
-        <Text style={styles.title}>สมัครสมาชิก</Text>
-        <Text style={styles.subtitle}>กรุณากรอกข้อมูลเพื่อสมัครสมาชิก</Text>
+      <ScrollView 
+        ref={scrollViewRef}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={true}
+        nestedScrollEnabled={true}
+        bounces={false}
+      >
+        <View ref={contentRef} style={styles.content}>
+          <Text style={styles.title}>Register</Text>
+          <Text style={styles.subtitle}>Please fill in the information to register</Text>
 
-        <View style={styles.inputContainer}>
-          <MaterialCommunityIcons 
-            name="account-outline" 
-            size={22} 
-            color="#777" 
-            style={styles.icon} 
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="ชื่อ"
-            placeholderTextColor="#aaa"
-            value={name}
-            onChangeText={setName}
-          />
-        </View>
+          <View 
+            ref={nameContainerRef}
+            style={styles.inputContainer}
+          >
+            <MaterialCommunityIcons
+              name="account-outline"
+              size={22}
+              color="#777"
+              style={styles.icon}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="First Name"
+              placeholderTextColor="#aaa"
+              value={name}
+              onChangeText={setName}
+              onFocus={() => handleInputFocus(nameContainerRef)}
+            />
+          </View>
 
-        <View style={styles.inputContainer}>
-          <MaterialCommunityIcons 
-            name="account-outline" 
-            size={22} 
-            color="#777" 
-            style={styles.icon} 
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="นามสกุล"
-            placeholderTextColor="#aaa"
-            value={surname}
-            onChangeText={setSurname}
-          />
-        </View>
+          <View 
+            ref={surnameContainerRef}
+            style={styles.inputContainer}
+          >
+            <MaterialCommunityIcons
+              name="account-outline"
+              size={22}
+              color="#777"
+              style={styles.icon}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Last Name"
+              placeholderTextColor="#aaa"
+              value={surname}
+              onChangeText={setSurname}
+              onFocus={() => handleInputFocus(surnameContainerRef)}
+            />
+          </View>
 
-        <View style={styles.inputContainer}>
-          <MaterialCommunityIcons 
-            name="email-outline" 
-            size={22} 
-            color="#777" 
-            style={styles.icon} 
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="อีเมล"
-            placeholderTextColor="#aaa"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            value={email}
-            onChangeText={setEmail}
-          />
-        </View>
+          <View 
+            ref={emailContainerRef}
+            style={styles.inputContainer}
+          >
+            <MaterialCommunityIcons
+              name="email-outline"
+              size={22}
+              color="#777"
+              style={styles.icon}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              placeholderTextColor="#aaa"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={email}
+              onChangeText={setEmail}
+              onFocus={() => handleInputFocus(emailContainerRef)}
+            />
+          </View>
 
-        <View style={styles.inputContainer}>
-          <MaterialCommunityIcons 
-            name="phone-outline" 
-            size={22} 
-            color="#777" 
-            style={styles.icon} 
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="เบอร์โทรศัพท์"
-            placeholderTextColor="#aaa"
-            keyboardType="phone-pad"
-            value={tel}
-            onChangeText={setTel}
-          />
-        </View>
+          <View 
+            ref={telContainerRef}
+            style={styles.inputContainer}
+          >
+            <MaterialCommunityIcons
+              name="phone-outline"
+              size={22}
+              color="#777"
+              style={styles.icon}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Phone Number"
+              placeholderTextColor="#aaa"
+              keyboardType="phone-pad"
+              value={tel}
+              onChangeText={setTel}
+              onFocus={() => handleInputFocus(telContainerRef)}
+            />
+          </View>
 
-        <View style={styles.inputContainer}>
-          <MaterialCommunityIcons 
-            name="lock-outline" 
-            size={22} 
-            color="#777" 
-            style={styles.icon} 
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)"
-            placeholderTextColor="#aaa"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
-        </View>
+          <View 
+            ref={passwordContainerRef}
+            style={styles.inputContainer}
+          >
+            <MaterialCommunityIcons
+              name="lock-outline"
+              size={22}
+              color="#777"
+              style={styles.icon}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Password (at least 6 characters)"
+              placeholderTextColor="#aaa"
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+              onFocus={() => handleInputFocus(passwordContainerRef)}
+            />
+          </View>
 
-        <TouchableOpacity 
-          style={[styles.registerButton, loading && styles.registerButtonDisabled]} 
-          onPress={handleRegister}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <MaterialCommunityIcons name="account-plus" size={24} color="#fff" />
-              <Text style={styles.registerText}>สมัครสมาชิก</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.loginContainer}>
-          <Text style={styles.loginText}>มีบัญชีอยู่แล้ว? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate("LoginVolunteer" as never)}>
-            <Text style={styles.loginLink}>เข้าสู่ระบบ</Text>
+          <TouchableOpacity
+            style={[styles.registerButton, loading && styles.registerButtonDisabled]}
+            onPress={handleRegister}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <MaterialCommunityIcons name="account-plus" size={24} color="#fff" />
+                <Text style={styles.registerText}>Register</Text>
+              </>
+            )}
           </TouchableOpacity>
+
+          <View style={styles.loginContainer}>
+            <Text style={styles.loginText}>Already have an account? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate("LoginVolunteer" as never)}>
+              <Text style={styles.loginLink}>Log In</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#f5f5f5", 
+  container: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingTop: 120,
+    paddingBottom: 100,
+    minHeight: "100%",
   },
   content: {
-    flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 25,
+    paddingTop: 20,
   },
   title: {
     fontSize: 24,
@@ -307,15 +386,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 12,
     position: "absolute",
-    top: 40, 
+    top: 40,
     left: 10,
     zIndex: 10,
-    marginTop: 90
+    marginTop: 90,
   },
-  backText: {
-    fontSize: 16,
-    marginLeft: 5,
-    color: "#000",
+  backText: { 
+    fontSize: 16, 
+    marginLeft: 5, 
+    color: "#000" 
   },
 });
 

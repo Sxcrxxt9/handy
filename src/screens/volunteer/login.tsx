@@ -1,190 +1,244 @@
-import React, { useState } from "react";
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
+import React, { useState, useRef } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
   TextInput,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons, MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import { RootStackParamList } from "../../navigations/navigator";
 import Header from "../../../assets/constants/header";
 import style from "../../../assets/style";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "../../config/firebase";
+import { apiFetch } from "../../utils/apiClient";
+import { ensurePushTokenSynced } from "../../utils/notifications";
 
-type LoginDisableScreenProp = NativeStackNavigationProp<
+type LoginVolunteerScreenProp = NativeStackNavigationProp<
   RootStackParamList,
-  "LoginDisable"
+  "LoginVolunteer"
 >;
 
-export default function LoginDisable() {
+type ProfileResponse = {
+  user: {
+    type: string;
+    points?: number;
+  } & Record<string, any>;
+};
+
+export default function LoginVolunteer() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const navigation = useNavigation<LoginDisableScreenProp>()
+
+  const navigation = useNavigation<LoginVolunteerScreenProp>();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const emailContainerRef = useRef<View>(null);
+  const passwordContainerRef = useRef<View>(null);
+  const contentRef = useRef<View>(null);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert("แจ้งเตือน", "กรุณากรอกอีเมลและรหัสผ่าน");
+      Alert.alert("Alert", "Please enter your email and password");
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert("แจ้งเตือน", "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร");
+      Alert.alert("Alert", "Password must be at least 6 characters");
       return;
     }
 
     setLoading(true);
 
     try {
-      // ตรวจสอบว่ามี user register แล้วหรือยัง (mock validation)
-      const registeredUsers = await AsyncStorage.getItem('registeredUsers');
-      const users = registeredUsers ? JSON.parse(registeredUsers) : [];
-      
-      const user = users.find((u: any) => 
-        u.email === email.trim().toLowerCase() && 
-        u.type === 'volunteer'
-      );
+      const normalizedEmail = email.trim().toLowerCase();
 
-      if (!user) {
-        Alert.alert(
-          "ไม่พบผู้ใช้",
-          "กรุณาสมัครสมาชิกก่อนเข้าสู่ระบบ",
-          [
-            {
-              text: "สมัครสมาชิก",
-              onPress: () => navigation.navigate("RegisterVolunteer" as never)
-            },
-            {
-              text: "ยกเลิก",
-              style: "cancel"
-            }
-          ]
-        );
-        setLoading(false);
+      await signInWithEmailAndPassword(auth, normalizedEmail, password);
+
+      const data = await apiFetch<ProfileResponse>("/auth/me");
+
+      if (data.user?.type !== "volunteer") {
+        Alert.alert("Alert", "This account is not registered as volunteer");
         return;
       }
 
-      // ตรวจสอบ password (ใน production จะใช้ Firebase Auth)
-      if (user.password !== password) {
-        Alert.alert("แจ้งเตือน", "อีเมลหรือรหัสผ่านไม่ถูกต้อง");
-        setLoading(false);
-        return;
-      }
+      await ensurePushTokenSynced();
 
-      // เก็บข้อมูล user ที่ login
-      await AsyncStorage.setItem('currentUser', JSON.stringify({
-        ...user,
-        loggedIn: true
-      }));
+      await AsyncStorage.setItem("currentUser", JSON.stringify(data.user));
 
-      // TODO: Implement Firebase Auth login
       navigation.replace("MainVolunteer");
     } catch (error: any) {
-      Alert.alert("เกิดข้อผิดพลาด", error.message || "ไม่สามารถเข้าสู่ระบบได้");
+      if (
+        error.code === "auth/invalid-credential" ||
+        error.code === "auth/invalid-email"
+      ) {
+        Alert.alert("Alert", "Invalid email or password");
+      } else if (error.code === "auth/user-disabled") {
+        Alert.alert("Alert", "This user account has been disabled");
+      } else if (error.code === "auth/user-not-found") {
+        Alert.alert("User Not Found", "Please register before logging in");
+      } else {
+        Alert.alert("Error", error.message || "Unable to log in");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleRegister = () => {
-    console.log("Forgot password pressed");
     navigation.navigate("RegisterVolunteer" as never);
   };
 
   const handleForgotPassword = () => {
-    console.log("Forgot password pressed");
     navigation.navigate("ForgotVolunteer" as never);
   };
 
+  const handleInputFocus = (containerRef: React.RefObject<View | null>) => {
+    setTimeout(() => {
+      if (containerRef.current && contentRef.current && scrollViewRef.current) {
+        containerRef.current.measureLayout(
+          contentRef.current,
+          (x, y, width, height) => {
+            const scrollOffset = y - 150;
+            scrollViewRef.current?.scrollTo({
+              y: Math.max(0, scrollOffset),
+              animated: true,
+            });
+          },
+          () => {
+            // Fallback: scroll down a bit
+            scrollViewRef.current?.scrollTo({
+              y: 150,
+              animated: true,
+            });
+          }
+        );
+      }
+    }, 100);
+  };
+
   return (
-    <View style={styles.container}>
-    <Header title="Login" />
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+    >
+      <Header title="Login" />
 
-    <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("Login" as never)}>
-        <MaterialCommunityIcons name="arrow-left" size={28} color="#000" />
+      <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("Login" as never)}>
+        <MaterialIcons name="arrow-back-ios" size={24} color="#000" />
         <Text style={styles.backText}>Back</Text>
-    </TouchableOpacity>
+      </TouchableOpacity>
 
-    <View style={styles.content}>
-        <Text style={styles.title}>Welcome to Handy</Text>
-        <Text style={styles.subtitle}>Login to continue</Text>
+      <ScrollView 
+        ref={scrollViewRef}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={true}
+        nestedScrollEnabled={true}
+        bounces={false}
+      >
+        <View ref={contentRef} style={styles.content}>
+          <Text style={styles.title}>Welcome to Handy</Text>
+          <Text style={styles.subtitle}>Login to continue</Text>
 
-        <View style={styles.inputContainer}>
-            <MaterialCommunityIcons 
-                name="email-outline" 
-                size={22} 
-                color="#777" 
-                style={styles.icon} 
+          <View 
+            ref={emailContainerRef}
+            style={styles.inputContainer}
+          >
+            <MaterialCommunityIcons
+              name="email-outline"
+              size={22}
+              color="#777"
+              style={styles.icon}
             />
             <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor="#aaa"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                value={email}
-                onChangeText={setEmail}
-          />
-    </View>
+              style={styles.input}
+              placeholder="Email"
+              placeholderTextColor="#aaa"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={email}
+              onChangeText={setEmail}
+              onFocus={() => handleInputFocus(emailContainerRef)}
+            />
+          </View>
 
-    
-    <View style={styles.inputContainer}>
-        <MaterialCommunityIcons 
-            name="lock-outline" 
-            size={22} 
-            color="#777" 
-            style={styles.icon} 
-        />
-        <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor="#aaa"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-        />
-    </View>
+          <View 
+            ref={passwordContainerRef}
+            style={styles.inputContainer}
+          >
+            <MaterialCommunityIcons
+              name="lock-outline"
+              size={22}
+              color="#777"
+              style={styles.icon}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              placeholderTextColor="#aaa"
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+              onFocus={() => handleInputFocus(passwordContainerRef)}
+            />
+          </View>
 
-        <TouchableOpacity 
-          style={[styles.loginButton, loading && styles.loginButtonDisabled]} 
-          onPress={handleLogin}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.loginText}>Login</Text>
-          )}
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.loginText}>Login</Text>
+            )}
+          </TouchableOpacity>
 
-    <View style={styles.linksContainer}>
-        <TouchableOpacity onPress={handleRegister}>
-            <Text style={styles.linkText}>Register</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={handleForgotPassword}>
-            <Text style={styles.linkText}>Forgot Password?</Text>
-        </TouchableOpacity>
-    </View>
-    </View>
-    </View>
+          <View style={styles.linksContainer}>
+            <TouchableOpacity onPress={handleRegister}>
+              <Text style={styles.linkText}>Register</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={handleForgotPassword}>
+              <Text style={styles.linkText}>Forgot Password?</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#f5f5f5", 
+  container: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingTop: 120,
+    paddingBottom: 100,
+    minHeight: "100%",
   },
   content: {
-    flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 25,
+    paddingTop: 20,
   },
   title: {
     fontSize: 24,
@@ -225,13 +279,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     elevation: 3,
   },
+  loginButtonDisabled: {
+    opacity: 0.6,
+  },
   loginText: {
     color: "#fff",
     fontSize: 18,
     fontWeight: "bold",
-  },
-  loginButtonDisabled: {
-    opacity: 0.6,
   },
   linksContainer: {
     flexDirection: "row",
@@ -250,10 +304,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 12,
     position: "absolute",
-    top: 40, 
+    top: 40,
     left: 10,
     zIndex: 10,
-    marginTop: 90
+    marginTop: 90,
   },
   backText: {
     fontSize: 16,

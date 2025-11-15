@@ -1,11 +1,12 @@
-import React, { useState, useRef } from "react";
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Dimensions, ScrollView, Animated } from "react-native";
+import React, { useState, useRef, useCallback } from "react";
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Dimensions, ScrollView, Animated, Linking, ActivityIndicator, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import style from '../../../assets/style/index'
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigations/navigator";
+import { fetchTopHeadlines, NewsArticle } from "../../utils/newsService";
 
 const { width, height } = Dimensions.get("window");
 type MainDisableScreenProp = NativeStackNavigationProp<
@@ -18,34 +19,49 @@ export default function HomeScreen() {
   const navigation = useNavigation<MainDisableScreenProp>()
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
+  const [newsData, setNewsData] = useState<NewsArticle[]>([]);
+  const [loadingNews, setLoadingNews] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   
-  const newsData = [
-    { 
-      id: "1", 
-      title: "ข่าวสารสำคัญ", 
-      image: "https://images.unsplash.com/photo-1588681664899-f142ff2dc9b1?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-      description: "ประกาศจากหน่วยงานรัฐ"
-    },
-    { 
-      id: "2", 
-      title: "แจ้งเตือนสภาพอากาศ", 
-      image: "https://images.unsplash.com/photo-1504608524841-42fe6f032b4b?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-      description: "พยากรณ์อากาศประจำสัปดาห์"
-    },
-    { 
-      id: "3", 
-      title: "กิจกรรมชุมชน", 
-      image: "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-      description: "กิจกรรมน่าสนใจในชุมชน"
-    },
-  ];
+  const loadNews = useCallback(async (forceRefresh = false) => {
+    try {
+      setLoadingNews(true);
+      const news = await fetchTopHeadlines(forceRefresh);
+      setNewsData(news);
+    } catch (error) {
+      console.error('Failed to load news:', error);
+    } finally {
+      setLoadingNews(false);
+    }
+  }, []);
 
-  const renderItem = ({ item }: {item: any}) => (
+  useFocusEffect(
+    useCallback(() => {
+      loadNews(true);
+    }, [loadNews])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const news = await fetchTopHeadlines(true);
+      setNewsData(news);
+    } catch (error) {
+      console.error('Failed to refresh news:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  const renderItem = ({ item }: {item: NewsArticle}) => (
     <View style={styles.slide}>
       <Image source={{ uri: item.image }} style={styles.slideImage} />
       <View style={styles.slideContent}>
-        <Text style={styles.slideTitle}>{item.title}</Text>
-        <Text style={styles.slideDescription}>{item.description}</Text>
+        <Text style={styles.slideTitle} numberOfLines={2}>{item.title}</Text>
+        <Text style={styles.slideDescription} numberOfLines={1}>{item.description}</Text>
+        {item.source && (
+          <Text style={styles.slideSource} numberOfLines={1}>{item.source}</Text>
+        )}
       </View>
     </View>
   );
@@ -77,6 +93,13 @@ export default function HomeScreen() {
   const handleReport2 =()=>{
     navigation.navigate("ReportSOS");
   }
+  const handleMyReports =()=>{
+    navigation.navigate("MyReports" as never);
+  }
+
+  const callEmergency = (phoneNumber: string) => {
+    Linking.openURL(`tel:${phoneNumber}`);
+  };
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -85,36 +108,54 @@ export default function HomeScreen() {
           <Text style={styles.headerTitle}>Home Screen</Text>
         </View>
         
-        <ScrollView style={styles.content}>
+        <ScrollView 
+          style={styles.content}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
           <View style={styles.sliderContainer}>
-            <FlatList
-              data={newsData}
-              keyExtractor={(item) => item.id}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onScroll={Animated.event(
-                [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                { useNativeDriver: false }
-              )}
-              onMomentumScrollEnd={(e) => {
-                const index = Math.round(e.nativeEvent.contentOffset.x / width);
-                setActiveIndex(index);
-              }}
-              renderItem={renderItem}
-            />
-            {renderPagination()}
+            {loadingNews ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={style.color.mainColor2} />
+                <Text style={styles.loadingText}>กำลังโหลดข่าวสาร...</Text>
+              </View>
+            ) : newsData.length > 0 ? (
+              <>
+                <FlatList
+                  data={newsData}
+                  keyExtractor={(item) => item.id}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  onScroll={Animated.event(
+                    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+                    { useNativeDriver: false }
+                  )}
+                  onMomentumScrollEnd={(e) => {
+                    const index = Math.round(e.nativeEvent.contentOffset.x / width);
+                    setActiveIndex(index);
+                  }}
+                  renderItem={renderItem}
+                />
+                {renderPagination()}
+              </>
+            ) : (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>ไม่พบข้อมูลข่าวสาร</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.buttonSection}>
-            <Text style={styles.sectionTitle}>แจ้งเหตุ</Text>
+            <Text style={styles.sectionTitle}>Report Incident</Text>
             <View style={styles.buttonRow}>
               <TouchableOpacity style={styles.buttonNormal}
               onPress={()=>handleReport()}>
                 <View style={styles.buttonIcon}>
                   <Ionicons name="alert-circle-outline" size={32} color="#fff" />
                 </View>
-                <Text style={styles.buttonText}>แจ้งเหตุปกติ</Text>
+                <Text style={styles.buttonText}>General Report</Text>
               </TouchableOpacity>
               
               <TouchableOpacity style={styles.buttonEmergency}
@@ -122,19 +163,28 @@ export default function HomeScreen() {
                 <View style={styles.buttonIcon}>
                   <Ionicons name="warning-outline" size={32} color="#fff" />
                 </View>
-                <Text style={styles.buttonText}>แจ้งเหตุฉุกเฉิน</Text>
+                <Text style={styles.buttonText}>Emergency Report</Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          <View style={styles.infoSection}>
-            <View style={styles.infoCard}>
-              <Ionicons name="information-circle" size={24} color='#48C48C' />
+          <View style={styles.buttonSection}>
+            <TouchableOpacity style={styles.infoCard} onPress={handleMyReports}>
+              <Ionicons name="document-text" size={24} color={style.color.mainColor2} />
               <View style={styles.infoContent}>
-                <Text style={styles.infoTitle}>เบอร์ติดต่อฉุกเฉิน</Text>
-                <Text style={styles.infoText}>082-085-5888</Text>
+                <Text style={styles.infoTitle}>My Reports</Text>
+                <Text style={styles.infoText}>View and manage all reports</Text>
               </View>
-            </View>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.emergencyButton}
+              onPress={() => callEmergency('191')}
+            >
+              <MaterialIcons name="emergency" size={24} color="#fff" />
+              <Text style={styles.emergencyButtonText}>Emergency Call 191</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </View>
@@ -148,7 +198,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8f9fa", 
   },
   header: {
-    padding: 16,
+    padding: 20,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
@@ -156,8 +206,8 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
+    fontSize: 24,
+    fontWeight: "700",
     color: "#333"
   },
   content: {
@@ -181,18 +231,38 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    padding: 16,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    padding: 12,
+    paddingBottom: 16,
+    maxHeight: "35%",
   },
   slideTitle: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   slideDescription: {
     color: "#fff",
+    fontSize: 12,
+    opacity: 0.9,
+  },
+  slideSource: {
+    color: "#fff",
+    fontSize: 10,
+    marginTop: 2,
+    opacity: 0.7,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    height: height * 0.35,
+  },
+  loadingText: {
+    marginTop: 12,
     fontSize: 14,
+    color: "#666",
   },
   pagination: {
     position: "absolute",
@@ -210,7 +280,6 @@ const styles = StyleSheet.create({
   buttonSection: {
     padding: 16,
     backgroundColor: "#fff",
-    marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 18,
@@ -259,16 +328,13 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
   },
-  infoSection: {
-    padding: 16,
-    backgroundColor: "#fff",
-  },
   infoCard: {
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
     backgroundColor: "#f1f8e9",
     borderRadius: 8,
+    marginBottom: 12,
   },
   infoContent: {
     marginLeft: 12,
@@ -282,5 +348,25 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 14,
     color: "#666",
+  },
+  emergencyButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#D7263D",
+    paddingVertical: 20,
+    borderRadius: 12,
+    justifyContent: "center",
+    marginTop: 12,
+    shadowColor: "#D7263D",
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  emergencyButtonText: {
+    color: "#fff",
+    marginLeft: 10,
+    fontSize: 17,
+    fontWeight: "bold",
   },
 });

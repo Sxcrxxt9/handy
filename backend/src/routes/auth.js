@@ -4,7 +4,6 @@ import { verifyToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Register new user (after Firebase Auth)
 router.post('/register', verifyToken, async (req, res, next) => {
   try {
     const { type, name, surname, tel } = req.body;
@@ -17,18 +16,15 @@ router.post('/register', verifyToken, async (req, res, next) => {
       });
     }
 
-    // Check if user already exists
     const existingUser = await User.getById(uid);
     if (existingUser) {
-      return res.status(400).json({
-        error: 'User already exists',
-      });
+      return res.status(400).json({ error: 'User already exists' });
     }
 
     const user = await User.create({
       uid,
-      email,
       type,
+      email,
       name,
       surname,
       tel,
@@ -43,7 +39,6 @@ router.post('/register', verifyToken, async (req, res, next) => {
   }
 });
 
-// Get current user profile
 router.get('/me', verifyToken, async (req, res, next) => {
   try {
     const user = await User.getById(req.user.uid);
@@ -54,13 +49,18 @@ router.get('/me', verifyToken, async (req, res, next) => {
       });
     }
 
+    if (user.type === 'volunteer') {
+      await User.checkDailyLoginBonus(req.user.uid);
+      const updatedUser = await User.getById(req.user.uid);
+      return res.json({ user: updatedUser });
+    }
+
     res.json({ user });
   } catch (error) {
     next(error);
   }
 });
 
-// Update user profile
 router.put('/me', verifyToken, async (req, res, next) => {
   try {
     const { name, surname, tel } = req.body;
@@ -69,6 +69,9 @@ router.put('/me', verifyToken, async (req, res, next) => {
     if (name) updateData.name = name;
     if (surname) updateData.surname = surname;
     if (tel) updateData.tel = tel;
+
+    const existingUser = await User.getById(req.user.uid);
+    if (!existingUser) return res.status(404).json({ error: 'User not found' });
 
     const updatedUser = await User.update(req.user.uid, updateData);
 
@@ -82,4 +85,3 @@ router.put('/me', verifyToken, async (req, res, next) => {
 });
 
 export default router;
-

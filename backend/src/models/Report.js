@@ -44,9 +44,13 @@ export class Report {
     let query = db.collection(REPORTS_COLLECTION).where('userId', '==', userId);
     
     if (status) {
+      // When filtering by status, we need a composite index
+      // For now, fetch all and filter in memory if needed
       query = query.where('status', '==', status);
     }
     
+    // Always order by createdAt - requires index: userId (ASC) + createdAt (DESC)
+    // Or if status filter: userId (ASC) + status (ASC) + createdAt (DESC)
     const snapshot = await query.orderBy('createdAt', 'desc').get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
@@ -63,7 +67,7 @@ export class Report {
   static async assignVolunteer(reportId, volunteerId) {
     const updateData = {
       assignedVolunteerId: volunteerId,
-      status: 'assigned',
+      status: 'in_progress',
       updatedAt: new Date(),
     };
     

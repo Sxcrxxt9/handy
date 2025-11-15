@@ -16,6 +16,8 @@ import ReportNormal from "../screens/disabled/reportNormal"
 import ReportSOS from "../screens/disabled/reportSOS"
 import caseScreen from "../screens/volunteer/case"
 import redeemScreen from "../screens/volunteer/redeem"
+import MyReportsScreen from "../screens/disabled/myReports"
+import InProgressCaseScreen from "../screens/volunteer/inProgressCase"
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -32,6 +34,8 @@ export type RootStackParamList = {
   ReportSOS: undefined;
   caseScreen: undefined;
   redeemScreen: undefined;
+  MyReports: undefined;
+  InProgressCase: { reportId: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -55,6 +59,8 @@ export default function AppNavigator() {
 
       <Stack.Screen name="caseScreen" component={caseScreen}/>
       <Stack.Screen name="redeemScreen" component={redeemScreen}/>
+      <Stack.Screen name="MyReports" component={MyReportsScreen}/>
+      <Stack.Screen name="InProgressCase" component={InProgressCaseScreen}/>
     </Stack.Navigator>
   );
 }

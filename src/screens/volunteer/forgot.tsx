@@ -1,20 +1,24 @@
+
 import React, { useState } from "react";
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
   TextInput,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons , MaterialIcons}  from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { RootStackParamList } from "../../navigations/navigator";
 import Header from "../../../assets/constants/header";
 import style from "../../../assets/style";
+import { auth } from "../../config/firebase";
+import { sendPasswordResetEmail } from "firebase/auth";
 
 type ForgotVolunteerScreenProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -22,139 +26,64 @@ type ForgotVolunteerScreenProp = NativeStackNavigationProp<
 >;
 
 export default function ForgotVolunteer() {
-  const [name, setName] = useState("");
-  const [surname, setSurname] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [tel, setTel] = useState("");
   const [loading, setLoading] = useState(false);
   const navigation = useNavigation<ForgotVolunteerScreenProp>();
 
   const handleForgotPassword = async () => {
-    // Validation
-    if (!name.trim() || !surname.trim() || !email.trim() || !password.trim() || !tel.trim()) {
-      Alert.alert("แจ้งเตือน", "กรุณากรอกข้อมูลให้ครบถ้วน");
-      return;
-    }
-
-    if (password.length < 6) {
-      Alert.alert("แจ้งเตือน", "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร");
+    if (!email.trim()) {
+      Alert.alert("Alert", "Please enter your email");
       return;
     }
 
     if (!email.includes("@")) {
-      Alert.alert("แจ้งเตือน", "กรุณากรอกอีเมลให้ถูกต้อง");
+      Alert.alert("Alert", "Please enter a valid email address");
       return;
     }
 
     setLoading(true);
 
     try {
-      // ตรวจสอบว่ามี email นี้อยู่แล้วหรือยัง
-      const registeredUsers = await AsyncStorage.getItem('registeredUsers');
-      const users = registeredUsers ? JSON.parse(registeredUsers) : [];
-      
-      const existingUser = users.find((u: any) => 
-        u.email === email.trim().toLowerCase()
-      );
-
-      if (existingUser) {
-        Alert.alert("แจ้งเตือน", "อีเมลนี้ถูกใช้งานแล้ว");
-        setLoading(false);
-        return;
-      }
-
-      // เก็บข้อมูล user ใหม่ (mock registration - ใน production จะใช้ Firebase Auth)
-      const newUser = {
-        id: Date.now().toString(),
-        email: email.trim().toLowerCase(),
-        password: password, // ใน production จะไม่เก็บ password แบบนี้
-        name: name.trim(),
-        surname: surname.trim(),
-        tel: tel.trim(),
-        type: 'volunteer',
-        points: 0,
-        createdAt: new Date().toISOString(),
-      };
-
-      users.push(newUser);
-      await AsyncStorage.setItem('registeredUsers', JSON.stringify(users));
-
-      // TODO: Implement Firebase Auth registration
-      // 1. Create user with Firebase Auth
-      // 2. Call backend API to register user profile
-      
+      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
       Alert.alert(
-        "สำเร็จ",
-        "สมัครสมาชิกเรียบร้อยแล้ว",
-        [
-          {
-            text: "ตกลง",
-            onPress: () => navigation.navigate("LoginVolunteer" as never)
-          }
-        ]
+        "Success",
+        "We have sent a password reset link to your email",
+        [{ text: "OK", onPress: () => navigation.goBack() }]
       );
     } catch (error: any) {
-      Alert.alert("เกิดข้อผิดพลาด", error.message || "ไม่สามารถสมัครสมาชิกได้");
+      console.error('Password reset error:', error);
+      Alert.alert(
+        "Error",
+        error.message || "Unable to send reset link"
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Header title="เปลี่ยนรหัสผ่าน" />
-      
-      <TouchableOpacity 
-        style={styles.backButton} 
-        onPress={() => navigation.goBack()}
-      >
-        <MaterialCommunityIcons name="arrow-left" size={28} color="#000" />
+    <KeyboardAvoidingView
+      style={styles.container}
+    >
+      <Header title="Forgot Password" />
+
+      <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("Login" as never)}>
+        <MaterialIcons name="arrow-back-ios" size={24} color="#000" />
         <Text style={styles.backText}>Back</Text>
-      </TouchableOpacity>
+      </TouchableOpacity> 
 
       <View style={styles.content}>
-        <Text style={styles.title}>เปลี่ยนรหัสผ่าน</Text>
-        <Text style={styles.subtitle}>กรุณากรอกอีเมลรหัสผ่านใหม่</Text>
-
-        {/* <View style={styles.inputContainer}>
-          <MaterialCommunityIcons 
-            name="account-outline" 
-            size={22} 
-            color="#777" 
-            style={styles.icon} 
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="ชื่อ"
-            placeholderTextColor="#aaa"
-            value={name}
-            onChangeText={setName}
-          />
-        </View>
+        <Text style={styles.title}>Forgot Password</Text>
+        <Text style={styles.subtitle}>
+        Please enter your email address
+        </Text>
 
         <View style={styles.inputContainer}>
-          <MaterialCommunityIcons 
-            name="account-outline" 
-            size={22} 
-            color="#777" 
-            style={styles.icon} 
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="นามสกุล"
-            placeholderTextColor="#aaa"
-            value={surname}
-            onChangeText={setSurname}
-          />
-        </View> */}
-
-        <View style={styles.inputContainer}>
-          <MaterialCommunityIcons 
-            name="email-outline" 
-            size={22} 
-            color="#777" 
-            style={styles.icon} 
+          <MaterialCommunityIcons
+            name="email-outline"
+            size={22}
+            color="#777"
+            style={styles.icon}
           />
           <TextInput
             style={styles.input}
@@ -167,59 +96,8 @@ export default function ForgotVolunteer() {
           />
         </View>
 
-        {/* <View style={styles.inputContainer}>
-          <MaterialCommunityIcons 
-            name="phone-outline" 
-            size={22} 
-            color="#777" 
-            style={styles.icon} 
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="เบอร์โทรศัพท์"
-            placeholderTextColor="#aaa"
-            keyboardType="phone-pad"
-            value={tel}
-            onChangeText={setTel}
-          />
-        </View> */}
-
-        <View style={styles.inputContainer}>
-          <MaterialCommunityIcons 
-            name="lock-outline" 
-            size={22} 
-            color="#777" 
-            style={styles.icon} 
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)"
-            placeholderTextColor="#aaa"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
-        </View>
-
-        <View style={styles.inputContainer}>
-          <MaterialCommunityIcons 
-            name="lock-outline" 
-            size={22} 
-            color="#777" 
-            style={styles.icon} 
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Confirm Password"
-            placeholderTextColor="#aaa"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
-        </View>
-
-        <TouchableOpacity 
-          style={[styles.registerButton, loading && styles.registerButtonDisabled]} 
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleForgotPassword}
           disabled={loading}
         >
@@ -227,28 +105,28 @@ export default function ForgotVolunteer() {
             <ActivityIndicator color="#fff" />
           ) : (
             <>
-              <MaterialCommunityIcons name="account-plus" size={24} color="#fff" />
-              <Text style={styles.registerText}>Confirm</Text>
+              {/* <MaterialCommunityIcons name="email-send" size={24} color="#fff" /> */}
+              <MaterialCommunityIcons name="email-arrow-right" size={24} color="#fff" />
+              <Text style={styles.buttonText}>send</Text>
             </>
           )}
         </TouchableOpacity>
 
         <View style={styles.loginContainer}>
-          <Text style={styles.loginText}>มีบัญชีอยู่แล้ว? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate("LoginVolunteer" as never)}>
-            <Text style={styles.loginLink}>เข้าสู่ระบบ</Text>
+          <Text style={styles.loginText}>Remember your password? </Text>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("LoginVolunteer" as never)}
+          >
+            <Text style={styles.loginLink}>login</Text>
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#f5f5f5", 
-  },
+  container: { flex: 1, backgroundColor: "#f5f5f5" },
   content: {
     flex: 1,
     justifyContent: "center",
@@ -265,6 +143,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#555",
     marginBottom: 20,
+    textAlign: "center",
   },
   inputContainer: {
     flexDirection: "row",
@@ -276,16 +155,9 @@ const styles = StyleSheet.create({
     width: "100%",
     elevation: 2,
   },
-  icon: {
-    marginRight: 5,
-  },
-  input: {
-    flex: 1,
-    height: 45,
-    fontSize: 16,
-    color: "#333",
-  },
-  registerButton: {
+  icon: { marginRight: 5 },
+  input: { flex: 1, height: 45, fontSize: 16, color: "#333" },
+  button: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -296,23 +168,15 @@ const styles = StyleSheet.create({
     marginTop: 20,
     elevation: 3,
   },
-  registerButtonDisabled: {
-    opacity: 0.6,
-  },
-  registerText: {
+  buttonDisabled: { opacity: 0.6 },
+  buttonText: {
     color: "#fff",
     fontSize: 18,
     fontWeight: "bold",
     marginLeft: 8,
   },
-  loginContainer: {
-    flexDirection: "row",
-    marginTop: 20,
-  },
-  loginText: {
-    fontSize: 14,
-    color: "#555",
-  },
+  loginContainer: { flexDirection: "row", marginTop: 20 },
+  loginText: { fontSize: 14, color: "#555" },
   loginLink: {
     fontSize: 14,
     color: style.color.mainColor1,
@@ -324,15 +188,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 12,
     position: "absolute",
-    top: 40, 
+    top: 40,
     left: 10,
     zIndex: 10,
-    marginTop: 90
+    marginTop: 90,
   },
-  backText: {
-    fontSize: 16,
-    marginLeft: 5,
-    color: "#000",
+  backText: { 
+    fontSize: 16, 
+    marginLeft: 5, 
+    color: "#000" 
   },
 });
-

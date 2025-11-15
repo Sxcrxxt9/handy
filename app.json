@@ -37,12 +37,14 @@
         }
       ],
       "expo-font",
-      "react-native-maps"
+      "react-native-maps",
+      "expo-notifications"
     ],
     "extra": {
       "eas": {
         "projectId": "0e12921a-4709-4097-a291-0dd4b41e22ec"
-      }
+      },
+      "newsApiKey": "22b883eb58a84dc383eb229f8317225c"
     }
   }
 }

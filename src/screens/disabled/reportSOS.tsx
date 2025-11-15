@@ -1,70 +1,170 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Dimensions, Image } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Dimensions, ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, Animated, Easing } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import MapView, { Marker } from "react-native-maps";
+import * as Location from "expo-location";
 
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import style from "../../../assets/style"
+import style from "../../../assets/style";
+import { apiFetch } from "../../utils/apiClient";
 
-type RootStackParamList = {
+ type RootStackParamList = {
   MainDisable: undefined;
 };
 
 type ReportScreenNavigationProp = StackNavigationProp<RootStackParamList, 'MainDisable'>;
 
+type CreateReportResponse = {
+  report: {
+    id: string;
+  };
+};
+
 const { width, height } = Dimensions.get("window");
 
 export default function ReportScreen2() {
   const navigation = useNavigation<ReportScreenNavigationProp>();
-  
-  const [selectedType, setSelectedType] = useState<string>("");
   const [details, setDetails] = useState<string>("");
+  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationLabel, setLocationLabel] = useState<string>("Finding location...");
+  const [loadingLocation, setLoadingLocation] = useState<boolean>(true);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState<boolean>(false);
+  const mapHeight = useState(new Animated.Value(height * 0.4))[0];
 
-  const incidentTypes = [
-    { id: "traffic", name: "จราจร", icon: "car" },
-    { id: "accident", name: "อุบัติเหตุ", icon: "warning" },
-    { id: "flood", name: "น้ำท่วม", icon: "water" },
-    { id: "other", name: "อื่นๆ", icon: "ellipsis-horizontal" },
-  ];
+  useEffect(() => {
+    const fetchLocation = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          setLocationLabel("Location access denied");
+          setLoadingLocation(false);
+          return;
+        }
 
-  const handleReport = () => {
-    // if (!selectedType) {
-    // //   Alert.alert("แจ้งเตือน", "กรุณาเลือกประเภทเหตุการณ์");
-    //   return;
-    // }
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Highest,
+        });
+        setCoords({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
 
+        const [geo] = await Location.reverseGeocodeAsync({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+
+        if (geo) {
+          const label = [
+            geo.name,
+            geo.street,
+            geo.district,
+            geo.region,
+            geo.city,
+          ]
+            .filter(Boolean)
+            .join(" ") || "Current location";
+          setLocationLabel(label);
+        } else {
+          setLocationLabel("Current location");
+        }
+      } catch (error) {
+        console.warn("Location error", error);
+        setLocationLabel("Unable to determine location");
+      } finally {
+        setLoadingLocation(false);
+      }
+    };
+
+    fetchLocation();
+  }, []);
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => {
+        setIsKeyboardVisible(true);
+        Animated.timing(mapHeight, {
+          toValue: height * 0.2,
+          duration: 350,
+          easing: Easing.bezier(0.4, 0.0, 0.2, 1),
+          useNativeDriver: false,
+        }).start();
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => {
+        setIsKeyboardVisible(false);
+        Animated.timing(mapHeight, {
+          toValue: height * 0.4,
+          duration: 350,
+          easing: Easing.bezier(0.4, 0.0, 0.2, 1),
+          useNativeDriver: false,
+        }).start();
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, [mapHeight]);
+
+  const handleReport = async () => {
     if (!details.trim()) {
-      Alert.alert("แจ้งเตือน", "กรุณากรอกรายละเอียด");
+      Alert.alert("Alert", "Please enter details");
+      return;
+    }
+
+    if (!coords) {
+      Alert.alert("Location Not Ready", "Current location not found. Please try again");
       return;
     }
 
     Alert.alert(
-      "ยืนยันการแจ้งเหตุ",
-      "คุณต้องการแจ้งเหตุนี้ใช่หรือไม่?",
+      "Confirm Report",
+      "Do you want to submit this emergency report?",
       [
         {
-          text: "ยกเลิก",
+          text: "Cancel",
           style: "cancel"
         },
         {
-          text: "แจ้งเหตุ",
-          onPress: () => {
-            console.log("แจ้งเหตุ:", {
-              type: selectedType,
-              details: details,
-            });
+          text: "Submit",
+          onPress: async () => {
+            try {
+              setSubmitting(true);
+              await apiFetch<CreateReportResponse>("/reports", {
+                method: "POST",
+                body: JSON.stringify({
+                  type: "sos",
+                  details: details.trim(),
+                  location: locationLabel,
+                  latitude: coords.latitude,
+                  longitude: coords.longitude,
+                }),
+              });
 
-            Alert.alert(
-              "สำเร็จ",
-              "แจ้งเหตุเรียบร้อยแล้ว",
-              [
-                {
-                  text: "ตกลง",
-                  onPress: () => navigation.replace('MainDisable')
-                }
-              ]
-            );
+              Alert.alert(
+                "Success",
+                "Emergency report submitted successfully",
+                [
+                  {
+                    text: "OK",
+                    onPress: () => navigation.replace('MainDisable')
+                  }
+                ]
+              );
+              setDetails("");
+            } catch (error: any) {
+              Alert.alert("Error", error.message || "Unable to submit report");
+            } finally {
+              setSubmitting(false);
+            }
           }
         }
       ]
@@ -73,75 +173,119 @@ export default function ReportScreen2() {
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>แจ้งเหตุ</Text>
-        </View>
-
-        <View style={styles.content}>
-          <View style={styles.mapContainer}>
-            <View style={styles.mockMap}>
-              <Image
-                source={{ uri: 'https://images.unsplash.com/photo-1542744095-fcf48d80b0fd?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80' }}
-                style={styles.mapImage}
-                resizeMode="cover"
-              />
-              <View style={styles.mapOverlay}>
-                <Ionicons name="location" size={24} color="#E53935" />
-                <Text style={styles.mapOverlayText}>ตำแหน่งปัจจุบัน</Text>
-              </View>
-              <View style={styles.mapMarker}>
-                <Ionicons name="location" size={32} color="#E53935" />
-              </View>
-            </View>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Emergency Report</Text>
           </View>
 
-          <ScrollView style={styles.formContainer}>
-            
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>ประเภท</Text>
-              <TextInput
-                style={styles.detailsInput2}
-                multiline
-                numberOfLines={1}
-                value="แจ้งเหตุฉุกเฉิน"
-                onChangeText={setDetails}
-                textAlignVertical="top"
-                editable={false}
-              />
-            </View>
+          <View style={styles.content}>
+            <Animated.View style={[styles.mapContainer, { height: mapHeight }]}>
+              {coords ? (
+                <MapView
+                  style={styles.map}
+                  initialRegion={{
+                    latitude: coords.latitude,
+                    longitude: coords.longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  }}
+                  region={{
+                    latitude: coords.latitude,
+                    longitude: coords.longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  }}
+                >
+                  <Marker
+                    coordinate={{
+                      latitude: coords.latitude,
+                      longitude: coords.longitude,
+                    }}
+                    title={locationLabel}
+                    description="Your location"
+                  >
+                    <View style={styles.markerContainer}>
+                      <Ionicons name="location" size={40} color="#E53935" />
+                    </View>
+                  </Marker>
+                </MapView>
+              ) : (
+                <View style={styles.mapPlaceholder}>
+                  <ActivityIndicator size="large" color={style.color.buttonColor} />
+                  <Text style={styles.mapPlaceholderText}>
+                    {loadingLocation ? "Finding location..." : "Location not found"}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.mapOverlay}>
+                <Ionicons name="location" size={20} color="#E53935" />
+                <Text style={styles.mapOverlayText} numberOfLines={1}>
+                  {loadingLocation ? "Finding location..." : locationLabel}
+                </Text>
+              </View>
+            </Animated.View>
 
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>รายละเอียด *</Text>
-              <TextInput
-                style={styles.detailsInput}
-                multiline
-                numberOfLines={4}
-                placeholder="กรุณากรอกรายละเอียดเหตุการณ์..."
-                value={details}
-                onChangeText={setDetails}
-                textAlignVertical="top"
-              />
-            </View>
-
-            <TouchableOpacity 
-              style={styles.reportButton}
-              onPress={handleReport}
+            <ScrollView
+              style={styles.formContainer}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={true}
+              contentContainerStyle={styles.scrollContent}
             >
-              <Ionicons name="alert-circle" size={24} color="#fff" />
-              <Text style={styles.reportButtonText}>แจ้งเหตุ</Text>
-            </TouchableOpacity>
-          </ScrollView>
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Type</Text>
+                <TextInput
+                  style={styles.detailsInput2}
+                  multiline
+                  numberOfLines={1}
+                  value="Emergency Report"
+                  editable={false}
+                />
+              </View>
+
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Details *</Text>
+                <TextInput
+                  style={styles.detailsInput}
+                  multiline
+                  numberOfLines={4}
+                  placeholder="Please enter emergency details..."
+                  value={details}
+                  onChangeText={setDetails}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.reportButton, submitting && styles.reportButtonDisabled]}
+                onPress={handleReport}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="alert-circle" size={24} color="#fff" />
+                    <Text style={styles.reportButtonText}>Submit Emergency</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#f8f9fa", 
+  container: {
+    flex: 1,
+    backgroundColor: "#f8f9fa",
   },
   header: {
     padding: 16,
@@ -159,21 +303,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mapContainer: {
-    height: height * 0.4, 
     position: "relative",
+    overflow: "hidden",
   },
-  mockMap: {
+  map: {
+    width: "100%",
+    height: "100%",
+  },
+  mapPlaceholder: {
     flex: 1,
     backgroundColor: "#e0e0e0",
     justifyContent: "center",
     alignItems: "center",
-    position: "relative",
-    overflow: "hidden",
   },
-  mapImage: {
-    width: "100%",
-    height: "100%",
-    opacity: 0.7,
+  mapPlaceholderText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#666",
   },
   mapOverlay: {
     position: "absolute",
@@ -182,39 +328,32 @@ const styles = StyleSheet.create({
     right: 16,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
     padding: 12,
     borderRadius: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 3,
-    elevation: 3,
+    elevation: 5,
+    gap: 8,
   },
   mapOverlayText: {
-    marginLeft: 8,
+    flex: 1,
     fontSize: 14,
     color: "#333",
     fontWeight: "500",
   },
-  mapMarker: {
-    position: "absolute",
-    top: "50%",
-    left: "50%",
-    marginLeft: -16,
-    marginTop: -16,
-    backgroundColor: "rgba(255, 255, 255, 0.8)",
-    borderRadius: 20,
-    padding: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 4,
+  markerContainer: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   formContainer: {
     flex: 1,
     padding: 16,
+  },
+  scrollContent: {
+    paddingBottom: 20,
   },
   section: {
     backgroundColor: "#fff",
@@ -233,35 +372,6 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 12,
   },
-  typeGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-  },
-  typeButton: {
-    width: "48%",
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    borderWidth: 2,
-    borderColor: "#4CAF50",
-    borderRadius: 8,
-    marginBottom: 8,
-    backgroundColor: "#fff",
-  },
-  typeButtonSelected: {
-    backgroundColor: "#4CAF50",
-    borderColor: "#4CAF50",
-  },
-  typeText: {
-    marginLeft: 8,
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#4CAF50",
-  },
-  typeTextSelected: {
-    color: "#fff",
-  },
   detailsInput: {
     borderWidth: 1,
     borderColor: "#ddd",
@@ -272,7 +382,7 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
     backgroundColor: "#f8f9fa",
   },
-    detailsInput2: {
+  detailsInput2: {
     borderWidth: 1,
     borderColor: "#ddd",
     borderRadius: 8,
@@ -295,6 +405,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 3,
     elevation: 3,
+  },
+  reportButtonDisabled: {
+    opacity: 0.6,
   },
   reportButtonText: {
     color: "#fff",

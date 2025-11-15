@@ -1,23 +1,20 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Alert, TouchableOpacity } from "react-native";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useNavigation } from "@react-navigation/native";
 import * as Location from "expo-location";
 import style from "../../assets/style";
-import id from "../../assets/constants/id"
-import Header from "../../assets/constants/header"
+import Header from "../../assets/constants/header";
 
 export default function LoginScreen() {
     const [location, setLocation] = useState<Location.LocationObject | null>(null);
     const navigation = useNavigation();
 
     const handleVolunteerPress = () => {
-        console.log("อาสาสมัคร pressed");
         navigation.navigate("LoginVolunteer" as never); 
     };
 
     const handleDisabledPress = () => {
-        console.log("ผู้พิการ pressed");
         navigation.navigate("LoginDisable" as never); 
     };
 
@@ -28,7 +25,7 @@ export default function LoginScreen() {
             if (status !== "granted") {
             Alert.alert(
                 "Permission Denied",
-                "ต้องอนุญาตเข้าถึงตำแหน่งเพื่อใช้งานแอป"
+                "Location access is required to use the app"
             );
             return;
             }
@@ -36,7 +33,6 @@ export default function LoginScreen() {
             const currentLocation = await Location.getCurrentPositionAsync({});
             setLocation(currentLocation);
         } catch (error) {
-            console.log("Error getting location:", error);
         }
         };
 
@@ -50,12 +46,12 @@ export default function LoginScreen() {
             <View style={styles.buttonRow}>
             <TouchableOpacity style={styles.button1} onPress={handleVolunteerPress}>
                 <MaterialCommunityIcons name="account-group" size={40} color="#fff" />
-                <Text style={styles.buttonText}>อาสาสมัคร</Text>
+                <Text style={styles.buttonText}>Volunteer</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.button2} onPress={handleDisabledPress}>
                 <MaterialCommunityIcons name="wheelchair-accessibility" size={40} color="#fff" />
-                <Text style={styles.buttonText}>ผู้พิการ</Text>
+                <Text style={styles.buttonText}>Disabled</Text>
             </TouchableOpacity>
             </View>
         </View>
