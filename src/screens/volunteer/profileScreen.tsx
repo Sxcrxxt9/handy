@@ -200,20 +200,7 @@ export default function ProfileScreen() {
       await AsyncStorage.setItem(`profileImage_${currentFirebaseUser.uid}`, imageUri);
       setProfileImage(imageUri);
       
-      // TODO: Upload image to backend server via API endpoint
-      // const formData = new FormData();
-      // formData.append('image', {
-      //   uri: imageUri,
-      //   type: 'image/jpeg',
-      //   name: 'profile.jpg',
-      // } as any);
-      // await apiFetch('/auth/me/avatar', {
-      //   method: 'PUT',
-      //   body: formData,
-      //   headers: {
-      //     'Content-Type': 'multipart/form-data',
-      //   },
-      // });
+      
 
       Alert.alert("Success", "Profile picture uploaded successfully");
     } catch (error) {
