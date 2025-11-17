@@ -37,7 +37,6 @@
         }
       ],
       "expo-font",
-      "react-native-maps",
       "expo-notifications"
     ],
     "extra": {
