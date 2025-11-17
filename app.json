@@ -42,9 +42,10 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "0e12921a-4709-4097-a291-0dd4b41e22ec"
+        "projectId": "437bacd4-9dac-4ae0-8cb5-1d88acc88f4a"
       },
       "newsApiKey": "22b883eb58a84dc383eb229f8317225c"
-    }
+    },
+    "owner": "beam_knn"
   }
 }
